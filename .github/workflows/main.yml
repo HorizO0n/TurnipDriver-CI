@@ -14,40 +14,61 @@ jobs:
 
     name: "Build for Arm64"
     runs-on: ubuntu-latest
-    steps:   
+
+    steps:
       - uses: actions/checkout@v4
 
       - name: Set Up Environment
         run: |
           sudo apt update
-          sudo apt install -y libxrandr-dev libxxf86vm-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev glslang-tools
+          sudo apt install -y \
+            libxrandr-dev libxxf86vm-dev libxcb-*-dev \
+            libx11-xcb-dev libxfixes-dev libdrm-dev \
+            libx11-dev glslang-tools ccache
           pip3 install mako meson ninja
+
+      - name: Configure ccache
+        run: |
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
+          mkdir -p ${{ github.workspace }}/.ccache
+
+      - name: Cache ccache files
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.arch }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.arch }}-
 
       - name: Set ndkver,sdkver and work_dir
         run: |
           echo "NDK_VER=android-ndk-r28b" >> $GITHUB_ENV
-          echo "SDK_VER=29" >> $GITHUB_ENV
+          echo "SDK_VER=33" >> $GITHUB_ENV
           echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
 
       - name: Download and extract NDK/Mesa
         run: |
-          echo "Downloading android-ndk from google server ..."
-          curl https://dl.google.com/android/repository/${NDK_VER}-linux.zip --output ${NDK_VER}-linux.zip &> /dev/null
-          echo "Extracting android-ndk to a folder ..."
-          unzip ${NDK_VER}-linux.zip &> /dev/null
-          echo "Get Mesa Repository ..."
+          curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
+          unzip -q ${NDK_VER}-linux.zip
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa
 
       - name: Build
         run: |
-          envsubst <android-${{matrix.arch}} >build-crossfile
+          envsubst < android-${{matrix.arch}} > build-crossfile
+
+          echo "===== CROSS FILE ====="
+          cat build-crossfile
+          echo "======================"
+
           cd mesa
-          meson setup "build-android" \
-            --cross-file "../build-crossfile" \
+
+          meson setup build-android \
+            --cross-file ../build-crossfile \
             -Dbuildtype=release \
             --prefix=/tmp/mesa \
             -Dplatforms=android \
-            -Dplatform-sdk-version=33 \
+            -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
             -Dgallium-drivers= \
             -Dvulkan-drivers=freedreno \
@@ -55,9 +76,15 @@ jobs:
             -Dandroid-strict=false \
             -Db_lto=true \
             -Degl=disabled
-          ninja -C "build-android" install
-          mkdir /tmp/mesa/turnip
+
+          ninja -C build-android install
+
+          mkdir -p /tmp/mesa/turnip
           cp /tmp/mesa/lib/libvulkan_freedreno.so /tmp/mesa/turnip/libvulkan_freedreno.so
+
+      - name: Show ccache stats
+        run: ccache -s
+
       - name: Upload Turnip
         uses: actions/upload-artifact@v4
         with:
