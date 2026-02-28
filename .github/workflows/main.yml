@@ -65,18 +65,27 @@ jobs:
 
           meson setup build-android \
             --cross-file ../build-crossfile \
-            -Dbuildtype=release \
             --prefix=/tmp/mesa \
+            -Dbuildtype=release \
+            -Dstrip=true \
+            -Db_lto=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
-            -Dgallium-drivers= \
+            -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
             -Dfreedreno-kmds=kgsl \
-            -Dandroid-strict=false \
-            -Db_lto=false \
-            -Degl=disabled
-
+            -Dgallium-drivers= \
+            -Dopengl=false \
+            -Dgles1=false \
+            -Dgles2=false \
+            -Degl=disabled \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Dllvm=disabled \
+            -Dc_link_args=-Wl,--gc-sections \
+            -Dcpp_link_args=-Wl,--gc-sections
+  
           ninja -C build-android install
 
           mkdir -p /tmp/mesa/turnip
