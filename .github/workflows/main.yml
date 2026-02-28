@@ -74,7 +74,7 @@ jobs:
             -Dvulkan-drivers=freedreno \
             -Dfreedreno-kmds=kgsl \
             -Dandroid-strict=false \
-            -Db_lto=true \
+            -Db_lto=false \
             -Degl=disabled
 
           ninja -C build-android install
