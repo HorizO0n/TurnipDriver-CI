@@ -5,14 +5,12 @@ ar = ndk + '/llvm-ar'
 
 c = ['ccache', ndk + '/aarch64-linux-android${SDK_VER}-clang']
 
-cpp = ['ccache', ndk + '/aarch64-linux-android${SDK_VER}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '--start-no-unused-arguments', '-static-libstdc++', '--end-no-unused-arguments', '-Wno-c++11-narrowing']
-
-c_ld = 'lld'
-cpp_ld = 'lld'
+cpp = ['ccache', ndk + '/aarch64-linux-android${SDK_VER}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '--start-no-unused-arguments', '-static-libstdc++', '--end-no-unused-arguments']
 
 strip = ndk + '/llvm-strip'
 
 pkg-config = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
+
 
 [host_machine]
 system = 'android'
@@ -26,4 +24,5 @@ needs_exe_wrapper = true
 
 
 [built-in options]
-b_lto = false
+c_args = ['-O3', '-fdata-sections', '-ffunction-sections']
+cpp_args = ['-O3', '-fdata-sections', '-ffunction-sections']
