@@ -3,7 +3,7 @@ name: Android CI
 on:
   workflow_dispatch:
   schedule:
-  - cron: "20 5 2,9,16,23 * *"
+    - cron: "20 5 2,9,16,23 * *"
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set Up Environment
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
@@ -27,40 +27,32 @@ jobs:
             libx11-dev glslang-tools ccache
           pip3 install mako meson ninja
 
-      - name: Configure ccache
-        run: |
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
-          mkdir -p ${{ github.workspace }}/.ccache
-
-      - name: Cache ccache files
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ runner.os }}-${{ matrix.arch }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.arch }}-
-
-      - name: Set ndkver,sdkver and work_dir
+      - name: Setup environment variables
         run: |
           echo "NDK_VER=android-ndk-r28b" >> $GITHUB_ENV
           echo "SDK_VER=33" >> $GITHUB_ENV
           echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
+          mkdir -p ${{ github.workspace }}/.ccache
 
-      - name: Download and extract NDK/Mesa
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.arch }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.arch }}
+
+      - name: Download NDK and Mesa
         run: |
           curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
           unzip -q ${NDK_VER}-linux.zip
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa
 
-      - name: Build
+      - name: Build Turnip (Freedreno Vulkan)
         run: |
           envsubst < android-${{matrix.arch}} > build-crossfile
-
-          echo "===== CROSS FILE ====="
-          cat build-crossfile
-          echo "======================"
-
           cd mesa
 
           meson setup build-android \
@@ -85,8 +77,12 @@ jobs:
             -Dllvm=disabled \
             -Dc_link_args=-Wl,--gc-sections \
             -Dcpp_link_args=-Wl,--gc-sections
-            
+
           ninja -C build-android install
+          
+          ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+            --strip-unneeded \
+            /tmp/mesa/lib/libvulkan_freedreno.so
 
           mkdir -p /tmp/mesa/turnip
           cp /tmp/mesa/lib/libvulkan_freedreno.so /tmp/mesa/turnip/libvulkan_freedreno.so
