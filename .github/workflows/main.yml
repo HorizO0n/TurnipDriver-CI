@@ -85,7 +85,7 @@ jobs:
             -Dllvm=disabled \
             -Dc_link_args=-Wl,--gc-sections \
             -Dcpp_link_args=-Wl,--gc-sections
-  
+            
           ninja -C build-android install
 
           mkdir -p /tmp/mesa/turnip
