@@ -29,8 +29,8 @@ jobs:
 
       - name: Setup environment variables
         run: |
-          echo "NDK_VER=android-ndk-r28b" >> $GITHUB_ENV
-          echo "SDK_VER=33" >> $GITHUB_ENV
+          echo "NDK_VER=android-ndk-r29" >> $GITHUB_ENV
+          echo "SDK_VER=34" >> $GITHUB_ENV
           echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
           echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
