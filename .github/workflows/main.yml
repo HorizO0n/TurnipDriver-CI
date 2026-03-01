@@ -48,7 +48,7 @@ jobs:
         run: |
           curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
           unzip -q ${NDK_VER}-linux.zip
-          git clone --depth 1 --branch main https://gitlab.freedesktop.org/robclark/mesa
+          git clone --depth 1 --branch fd/misc https://gitlab.freedesktop.org/robclark/mesa
 
       - name: Build Turnip (Freedreno Vulkan)
         run: |
