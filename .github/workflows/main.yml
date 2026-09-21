@@ -58,7 +58,7 @@ jobs:
             --cross-file ../build-crossfile \
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
-            -Dperfetto=false
+            -Dperfetto=false \
             -Dstrip=true \
             -Db_ndebug=true \
             -Db_lto=false \
