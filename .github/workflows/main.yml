@@ -59,6 +59,7 @@ jobs:
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
             -Dstrip=true \
+            -Db_ndebug=true \
             -Db_lto=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
@@ -74,6 +75,7 @@ jobs:
             -Dglx=disabled \
             -Dgbm=disabled \
             -Dllvm=disabled \
+            -Dc_args="-DNDEBUG" \
             -Dc_link_args=-Wl,--gc-sections \
             -Dcpp_link_args=-Wl,--gc-sections
 
@@ -81,6 +83,7 @@ jobs:
 
           ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             --strip-unneeded \
+            --strip-debug \
             /tmp/mesa/lib/libvulkan_freedreno.so
 
           mkdir -p /tmp/mesa/turnip
