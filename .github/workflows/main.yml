@@ -2,8 +2,6 @@ name: Android CI
 
 on:
   workflow_dispatch:
-  schedule:
-  - cron: "20 5 2,9,16,23 * *"
 
 jobs:
   build:
@@ -14,50 +12,87 @@ jobs:
 
     name: "Build for Arm64"
     runs-on: ubuntu-latest
-    steps:   
+
+    steps:
       - uses: actions/checkout@v4
 
-      - name: Set Up Environment
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y libxrandr-dev libxxf86vm-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev glslang-tools
+          sudo apt install -y \
+            libxrandr-dev libxxf86vm-dev libxcb-*-dev \
+            libx11-xcb-dev libxfixes-dev libdrm-dev \
+            libx11-dev glslang-tools ccache
           pip3 install mako meson ninja
 
-      - name: Set ndkver,sdkver and work_dir
+      - name: Setup environment variables
         run: |
-          echo "NDK_VER=android-ndk-r28b" >> $GITHUB_ENV
-          echo "SDK_VER=29" >> $GITHUB_ENV
+          echo "NDK_VER=android-ndk-r29" >> $GITHUB_ENV
+          echo "SDK_VER=34" >> $GITHUB_ENV
           echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
+          mkdir -p ${{ github.workspace }}/.ccache
 
-      - name: Download and extract NDK/Mesa
-        run: |
-          echo "Downloading android-ndk from google server ..."
-          curl https://dl.google.com/android/repository/${NDK_VER}-linux.zip --output ${NDK_VER}-linux.zip &> /dev/null
-          echo "Extracting android-ndk to a folder ..."
-          unzip ${NDK_VER}-linux.zip &> /dev/null
-          echo "Get Mesa Repository ..."
-          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.arch }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.arch }}
 
-      - name: Build
+      - name: Download NDK and Mesa
         run: |
-          envsubst <android-${{matrix.arch}} >build-crossfile
+          curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
+          unzip -q ${NDK_VER}-linux.zip
+          git clone --depth 1 --branch fd/sync-regs \
+            https://gitlab.freedesktop.org/robclark/mesa.git mesa
+
+      - name: Build Turnip (Freedreno Vulkan)
+        run: |
+          envsubst < android-${{matrix.arch}} > build-crossfile
           cd mesa
-          meson setup "build-android" \
-            --cross-file "../build-crossfile" \
-            -Dbuildtype=release \
+
+          meson setup build-android \
+            --cross-file ../build-crossfile \
             --prefix=/tmp/mesa \
+            -Dbuildtype=release \
+            -Dperfetto=false \
+            -Dstrip=true \
+            -Db_ndebug=true \
+            -Db_lto=false \
             -Dplatforms=android \
-            -Dplatform-sdk-version=33 \
+            -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
-            -Dgallium-drivers= \
+            -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
             -Dfreedreno-kmds=kgsl \
-            -Dandroid-strict=false \
-            -Db_lto=true \
-            -Degl=disabled
-          ninja -C "build-android" install
-          mkdir /tmp/mesa/turnip
+            -Dgallium-drivers= \
+            -Dopengl=false \
+            -Dgles1=false \
+            -Dgles2=false \
+            -Degl=disabled \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Dllvm=disabled \
+            -Dc_args="-DNDEBUG" \
+            -Dc_link_args=-Wl,--gc-sections \
+            -Dcpp_link_args=-Wl,--gc-sections
+
+          ninja -C build-android install
+
+          ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+            --strip-unneeded \
+            --strip-debug \
+            /tmp/mesa/lib/libvulkan_freedreno.so
+
+          mkdir -p /tmp/mesa/turnip
           cp /tmp/mesa/lib/libvulkan_freedreno.so /tmp/mesa/turnip/libvulkan_freedreno.so
+
+      - name: Show ccache stats
+        run: ccache -s
+
       - name: Upload Turnip
         uses: actions/upload-artifact@v4
         with:
