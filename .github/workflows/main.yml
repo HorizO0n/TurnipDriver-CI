@@ -46,7 +46,8 @@ jobs:
         run: |
           curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
           unzip -q ${NDK_VER}-linux.zip
-          git clone --depth 1 --branch main https://gitlab.freedesktop.org/robclark/mesa/
+          git clone --depth 1 --branch main \
+            https://gitlab.freedesktop.org/robclark/mesa.git mesa
 
       - name: Build Turnip (Freedreno Vulkan)
         run: |
@@ -57,7 +58,9 @@ jobs:
             --cross-file ../build-crossfile \
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
+            -Dperfetto=false \
             -Dstrip=true \
+            -Db_ndebug=true \
             -Db_lto=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
@@ -73,13 +76,15 @@ jobs:
             -Dglx=disabled \
             -Dgbm=disabled \
             -Dllvm=disabled \
+            -Dc_args="-DNDEBUG" \
             -Dc_link_args=-Wl,--gc-sections \
             -Dcpp_link_args=-Wl,--gc-sections
 
           ninja -C build-android install
-          
+
           ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             --strip-unneeded \
+            --strip-debug \
             /tmp/mesa/lib/libvulkan_freedreno.so
 
           mkdir -p /tmp/mesa/turnip
