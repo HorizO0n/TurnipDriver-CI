@@ -50,7 +50,7 @@ jobs:
 
       - name: Build Turnip (Freedreno Vulkan)
         run: |
-          envsubst < android-${{matrix.arch}} > build-crossfile
+          envsubst < android-${{ matrix.arch }} > build-crossfile
           cd mesa
 
           meson setup build-android \
@@ -80,17 +80,23 @@ jobs:
             -Dc_link_args="-Wl,--gc-sections" \
             -Dcpp_link_args="-Wl,--gc-sections"
 
-          meson configure build-android
-          ninja -C build-android -t targets all | grep -i 'testdict'
+          # Compila somente a biblioteca Turnip
+          ninja -C build-android -t targets all | grep 'libvulkan_freedreno.so'
 
-          
+          ninja -C build-android src/freedreno/vulkan/libvulkan_freedreno.so
+
+          # Copia a biblioteca compilada para o artefato
+          mkdir -p /tmp/mesa/turnip
+          cp build-android/src/freedreno/vulkan/libvulkan_freedreno.so \
+            /tmp/mesa/turnip/libvulkan_freedreno.so
+
+          # Verifica o arquivo antes de continuar
+          test -s /tmp/mesa/turnip/libvulkan_freedreno.so
+
           ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             --strip-unneeded \
-            /tmp/mesa/lib/libvulkan_freedreno.so
-
-          mkdir -p /tmp/mesa/turnip
-          cp /tmp/mesa/lib/libvulkan_freedreno.so /tmp/mesa/turnip/libvulkan_freedreno.so
-
+            /tmp/mesa/turnip/libvulkan_freedreno.so
+            
       - name: Show ccache stats
         run: ccache -s
 
