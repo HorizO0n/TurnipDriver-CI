@@ -61,7 +61,6 @@ jobs:
             -Dstrip=true \
             -Db_lto=false \
             -Db_asneeded=true \
-            -Dtests=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
@@ -81,7 +80,8 @@ jobs:
             -Dc_link_args="-Wl,--gc-sections" \
             -Dcpp_link_args="-Wl,--gc-sections"
 
-          ninja -C build-android install
+          meson configure build-android
+          ninja -C build-android -t targets all | grep -i 'testdict'
 
           
           ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
