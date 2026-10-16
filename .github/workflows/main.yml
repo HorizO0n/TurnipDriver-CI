@@ -60,7 +60,7 @@ jobs:
             -Doptimization=s \
             -Dstrip=true \
             -Db_lto=false \
-            -Db_asneeded=true \
+            -Db_asneeded=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
