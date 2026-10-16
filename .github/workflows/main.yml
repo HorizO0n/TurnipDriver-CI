@@ -57,8 +57,10 @@ jobs:
             --cross-file ../build-crossfile \
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
+            -Doptimization=s \
             -Dstrip=true \
-            -Db_lto=false \
+            -Db_lto=true \
+            -Db_asneeded=true \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
@@ -73,10 +75,13 @@ jobs:
             -Dglx=disabled \
             -Dgbm=disabled \
             -Dllvm=disabled \
-            -Dc_link_args=-Wl,--gc-sections \
-            -Dcpp_link_args=-Wl,--gc-sections
+            -Dc_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
+            -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
+            -Dc_link_args="-Wl,--gc-sections" \
+            -Dcpp_link_args="-Wl,--gc-sections"
 
           ninja -C build-android install
+
           
           ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
             --strip-unneeded \
