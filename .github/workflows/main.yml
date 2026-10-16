@@ -76,9 +76,8 @@ jobs:
             -Dgbm=disabled \
             -Dllvm=disabled \
             -Dc_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
-            -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
-            -Dc_link_args="-Wl,--gc-sections" \
-            -Dcpp_link_args="-Wl,--gc-sections"
+            -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" 
+            
 
           # Compila somente a biblioteca Turnip
           ninja -C build-android -t targets all | grep 'libvulkan_freedreno.so'
