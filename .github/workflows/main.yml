@@ -59,7 +59,7 @@ jobs:
             -Dbuildtype=release \
             -Doptimization=s \
             -Dstrip=true \
-            -Db_lto=true \
+            -Db_lto=false \
             -Db_asneeded=true \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
