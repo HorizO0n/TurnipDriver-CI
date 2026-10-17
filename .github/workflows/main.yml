@@ -1,3 +1,4 @@
+
 name: Android CI
 
 on:
@@ -63,12 +64,27 @@ jobs:
         run: |
           set -euo pipefail
 
-          envsubst < "android-${{ matrix.arch }}" > build-crossfile
+          SOURCE_FILE="android-${{ matrix.arch }}"
+
+          if [[ ! -f "$SOURCE_FILE" ]]; then
+            echo "ERRO: arquivo $SOURCE_FILE não encontrado"
+            exit 1
+          fi
+
+          echo "===== CORRIGINDO E GERANDO CROSSFILE ====="
+
+          sed \
+            -E \
+            -e '/^[[:space:]]*b_lto[[:space:]]*=/d' \
+            -e "s/^[[:space:]]*pkgconfig[[:space:]]*=/\\'pkg-config\\' =/" \
+            "$SOURCE_FILE" |
+            envsubst > build-crossfile
 
           echo "===== CROSSFILE GERADO ====="
           cat build-crossfile
 
-          echo "===== VALIDAR CROSSFILE ====="
+          echo "===== VALIDANDO CROSSFILE ====="
+
           python3 - <<'PY'
           import ast
           import configparser
@@ -107,16 +123,15 @@ jobs:
               print(f"{key} = {parsed!r}")
 
           if config.has_option("host_machine", "b_lto"):
-              raise SystemExit(
-                  "ERRO: remova b_lto de [host_machine]; "
-                  "use -Db_lto=false no Meson"
-              )
+              raise SystemExit("ERRO: b_lto ainda está em host_machine")
 
           if config.has_option("binaries", "pkgconfig"):
-              raise SystemExit(
-                  "ERRO: troque pkgconfig por 'pkg-config' "
-                  "no arquivo android-aarch64"
-              )
+              raise SystemExit("ERRO: pkgconfig ainda não foi corrigido")
+
+          if not config.has_option("binaries", "pkg-config"):
+              raise SystemExit("ERRO: entrada pkg-config ausente")
+
+          print("Crossfile validado.")
           PY
 
           cd mesa
@@ -148,12 +163,15 @@ jobs:
             -Dc_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
             -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions"
 
+          echo "===== COMPILANDO TURNIP ====="
+
           ninja -C build-android \
             src/freedreno/vulkan/libvulkan_freedreno.so
 
           mkdir -p /tmp/mesa/turnip
 
-          cp build-android/src/freedreno/vulkan/libvulkan_freedreno.so \
+          cp \
+            build-android/src/freedreno/vulkan/libvulkan_freedreno.so \
             /tmp/mesa/turnip/libvulkan_freedreno.so
 
           test -s /tmp/mesa/turnip/libvulkan_freedreno.so
@@ -162,7 +180,11 @@ jobs:
             --strip-unneeded \
             /tmp/mesa/turnip/libvulkan_freedreno.so
 
+          echo "===== TURNIP COMPILADO COM SUCESSO ====="
+          file /tmp/mesa/turnip/libvulkan_freedreno.so
+
       - name: Show ccache stats
+        if: always()
         run: ccache -s
 
       - name: Upload Turnip
@@ -170,3 +192,4 @@ jobs:
         with:
           name: Turnip-Android-Arm64
           path: /tmp/mesa/turnip/libvulkan_freedreno.so
+          if-no-files-found: error
