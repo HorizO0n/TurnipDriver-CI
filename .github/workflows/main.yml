@@ -19,6 +19,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+
           sudo apt update
           sudo apt install -y \
             libxrandr-dev libxxf86vm-dev libxcb-*-dev \
@@ -29,6 +31,8 @@ jobs:
           python3 -m pip install --user \
             --break-system-packages mako meson ninja
 
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Setup environment variables
         run: |
           echo "NDK_VER=android-ndk-r29" >> "$GITHUB_ENV"
@@ -36,6 +40,7 @@ jobs:
           echo "WORK_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
           echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+
           mkdir -p "$GITHUB_WORKSPACE/.ccache"
 
       - name: Cache ccache
@@ -73,12 +78,31 @@ jobs:
 
           echo "===== CORRIGINDO E GERANDO CROSSFILE ====="
 
-          sed \
-            -E \
-            -e '/^[[:space:]]*b_lto[[:space:]]*=/d' \
-            -e "s/^[[:space:]]*pkgconfig[[:space:]]*=/\\'pkg-config\\' =/" \
-            "$SOURCE_FILE" |
-            envsubst > build-crossfile
+          python3 - "$SOURCE_FILE" <<'PY' > /tmp/crossfile-template
+          import re
+          import sys
+          from pathlib import Path
+
+          text = Path(sys.argv[1]).read_text()
+
+          # b_lto é uma opção do projeto, não de [host_machine].
+          text = re.sub(
+              r"(?m)^[ \t]*b_lto[ \t]*=.*(?:\n|$)",
+              "",
+              text
+          )
+
+          # Corrige o nome da chave do executável pkg-config.
+          text = re.sub(
+              r"(?m)^([ \t]*)pkgconfig([ \t]*=)",
+              r"\1'pkg-config'\2",
+              text
+          )
+
+          sys.stdout.write(text)
+          PY
+
+          envsubst < /tmp/crossfile-template > build-crossfile
 
           echo "===== CROSSFILE GERADO ====="
           cat build-crossfile
@@ -86,15 +110,20 @@ jobs:
           echo "===== VALIDANDO CROSSFILE ====="
 
           python3 - <<'PY'
+          from pathlib import Path
           import ast
           import configparser
+          import re
+
+          path = Path("build-crossfile")
+          text = path.read_text()
 
           config = configparser.ConfigParser(
               interpolation=None,
               inline_comment_prefixes=("#", ";")
           )
 
-          if not config.read("build-crossfile"):
+          if not config.read(path):
               raise SystemExit("ERRO: crossfile não encontrado")
 
           if not config.has_section("host_machine"):
@@ -125,18 +154,26 @@ jobs:
           if config.has_option("host_machine", "b_lto"):
               raise SystemExit("ERRO: b_lto ainda está em host_machine")
 
-          if config.has_option("binaries", "pkgconfig"):
-              raise SystemExit("ERRO: pkgconfig ainda não foi corrigido")
+          if re.search(r"(?m)^[ \t]*pkgconfig[ \t]*=", text):
+              raise SystemExit(
+                  "ERRO: chave antiga pkgconfig ainda presente"
+              )
 
-          if not config.has_option("binaries", "pkg-config"):
+          if not re.search(
+              r"""(?m)^[ \t]*['"]pkg-config['"][ \t]*=""",
+              text
+          ):
               raise SystemExit("ERRO: entrada pkg-config ausente")
 
-          print("Crossfile validado.")
+          print("Crossfile validado com sucesso.")
           PY
 
-          cd mesa
-
+          echo "===== VERSÃO DO MESON ====="
           meson --version
+
+          echo "===== CONFIGURANDO MESA ====="
+
+          cd mesa
 
           meson setup build-android \
             --cross-file ../build-crossfile \
@@ -167,6 +204,8 @@ jobs:
 
           ninja -C build-android \
             src/freedreno/vulkan/libvulkan_freedreno.so
+
+          echo "===== PREPARANDO ARTEFATO ====="
 
           mkdir -p /tmp/mesa/turnip
 
