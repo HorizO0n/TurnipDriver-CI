@@ -26,7 +26,7 @@ jobs:
             libxrandr-dev libxxf86vm-dev libxcb-*-dev \
             libx11-xcb-dev libxfixes-dev libdrm-dev \
             libx11-dev glslang-tools ccache gettext-base \
-            curl unzip git python3-pip
+            curl unzip git python3-pip binutils
 
           python3 -m pip install --user \
             --break-system-packages mako meson ninja
@@ -70,6 +70,7 @@ jobs:
           set -euo pipefail
 
           SOURCE_FILE="android-${{ matrix.arch }}"
+          NDK_BIN="${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
           if [[ ! -f "$SOURCE_FILE" ]]; then
             echo "ERRO: arquivo $SOURCE_FILE não encontrado"
@@ -85,15 +86,27 @@ jobs:
 
           text = Path(sys.argv[1]).read_text()
 
-          # Remove b_lto do crossfile.
-          # O valor será passado como opção ao Meson.
+          # Remove b_lto de host_machine, se existir.
           text = re.sub(
               r"(?m)^[ \t]*b_lto[ \t]*=.*(?:\n|$)",
               "",
               text
           )
 
-          # Não adiciona aspas à chave pkgconfig.
+          # Evita a chave inválida 'pkg-config' com aspas.
+          text = re.sub(
+              r"(?m)^([ \t]*)['\"]pkg-config['\"]([ \t]*=)",
+              r"\1pkgconfig\2",
+              text
+          )
+
+          # Corrige o nome antigo caso esteja presente.
+          text = re.sub(
+              r"(?m)^([ \t]*)pkgconfig([ \t]*=)",
+              r"\1pkgconfig\2",
+              text
+          )
+
           sys.stdout.write(text)
           PY
 
@@ -107,11 +120,9 @@ jobs:
           python3 - <<'PY'
           import ast
           import configparser
-
           from pathlib import Path
 
           path = Path("build-crossfile")
-
           config = configparser.ConfigParser(
               interpolation=None,
               inline_comment_prefixes=("#", ";")
@@ -120,15 +131,11 @@ jobs:
           if not config.read(path):
               raise SystemExit("ERRO: crossfile não encontrado")
 
-          if not config.has_section("binaries"):
-              raise SystemExit("ERRO: seção [binaries] ausente")
+          for section in ("binaries", "host_machine"):
+              if not config.has_section(section):
+                  raise SystemExit(f"ERRO: seção [{section}] ausente")
 
-          if not config.has_section("host_machine"):
-              raise SystemExit("ERRO: seção [host_machine] ausente")
-
-          required = ["system", "cpu_family", "cpu", "endian"]
-
-          for key in required:
+          for key in ("system", "cpu_family", "cpu", "endian"):
               if not config.has_option("host_machine", key):
                   raise SystemExit(f"ERRO: campo ausente: {key}")
 
@@ -137,34 +144,34 @@ jobs:
               try:
                   parsed = ast.literal_eval(value)
               except (ValueError, SyntaxError):
-                  raise SystemExit(
-                      f"ERRO: valor inválido em host_machine.{key}: {value}"
-                  )
+                  raise SystemExit(f"ERRO: valor inválido em {key}: {value}")
 
               if not isinstance(parsed, str):
-                  raise SystemExit(
-                      f"ERRO: host_machine.{key} precisa ser string"
-                  )
+                  raise SystemExit(f"ERRO: {key} precisa ser string")
 
               print(f"{key} = {parsed!r}")
 
           if config.has_option("host_machine", "b_lto"):
-              raise SystemExit(
-                  "ERRO: b_lto não deve estar em host_machine"
-              )
+              raise SystemExit("ERRO: b_lto ainda está em host_machine")
 
           if not config.has_option("binaries", "pkgconfig"):
-              raise SystemExit(
-                  "ERRO: entrada pkgconfig ausente em [binaries]"
-              )
+              raise SystemExit("ERRO: entrada pkgconfig ausente")
 
           print("Crossfile validado com sucesso.")
           PY
 
-          echo "===== VERSÃO DO MESON ====="
-          meson --version
+          # Adiciona opções do linker ao crossfile.
+          # A política ignore-all permite referências que o build Android
+          # espera resolver no ambiente de execução; libandroid é ligada
+          # explicitamente para as APIs AHardwareBuffer.
+          cat >> build-crossfile <<'EOF'
+
+          [built-in options]
+          cpp_link_args = ['-Wl,--unresolved-symbols=ignore-all', '-Wl,--no-as-needed', '-landroid']
+          EOF
 
           echo "===== CONFIGURANDO MESA ====="
+          meson --version
 
           cd mesa
 
@@ -180,6 +187,7 @@ jobs:
             -Dplatform-sdk-version="${SDK_VER}" \
             -Dandroid-stub=true \
             -Dandroid-strict=false \
+            -Dandroid-libbacktrace=disabled \
             -Dvulkan-drivers=freedreno \
             -Dfreedreno-kmds=kgsl \
             -Dgallium-drivers= \
@@ -200,20 +208,22 @@ jobs:
 
           echo "===== PREPARANDO ARTEFATO ====="
 
+          OUTPUT="/tmp/mesa/turnip/libvulkan_freedreno.so"
           mkdir -p /tmp/mesa/turnip
 
           cp \
             build-android/src/freedreno/vulkan/libvulkan_freedreno.so \
-            /tmp/mesa/turnip/libvulkan_freedreno.so
+            "$OUTPUT"
 
-          test -s /tmp/mesa/turnip/libvulkan_freedreno.so
+          test -s "$OUTPUT"
 
-          "${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
-            --strip-unneeded \
-            /tmp/mesa/turnip/libvulkan_freedreno.so
+          "${NDK_BIN}/llvm-strip" --strip-unneeded "$OUTPUT"
 
-          echo "===== TURNIP COMPILADO COM SUCESSO ====="
-          file /tmp/mesa/turnip/libvulkan_freedreno.so
+          echo "===== VERIFICANDO BIBLIOTECA ====="
+          file "$OUTPUT"
+          "${NDK_BIN}/llvm-readelf" -d "$OUTPUT" || true
+
+          echo "===== TURNIP COMPILADO ====="
 
       - name: Show ccache stats
         if: always()
