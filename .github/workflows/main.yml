@@ -48,11 +48,38 @@ jobs:
           unzip -q ${NDK_VER}-linux.zip
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa
 
+
       - name: Build Turnip (Freedreno Vulkan)
+        shell: bash
         run: |
+          set -euo pipefail
+
           envsubst < android-${{ matrix.arch }} > build-crossfile
+
+          echo "===== CROSSFILE GERADO ====="
+          cat build-crossfile
+
+          echo "===== VALIDAR HOST_MACHINE ====="
+          python3 - <<'PY'
+          import configparser
+
+          config = configparser.ConfigParser()
+          config.read("build-crossfile")
+
+          if not config.has_section("host_machine"):
+              raise SystemExit("ERRO: seção [host_machine] ausente")
+
+          required = ["system", "cpu_family", "cpu", "endian"]
+
+          for key in required:
+              if not config.has_option("host_machine", key):
+                  raise SystemExit(f"ERRO: campo ausente: {key}")
+              print(f"{key} = {config.get('host_machine', key)}")
+          PY
+
           cd mesa
 
+          meson --version
           meson setup build-android \
             --cross-file ../build-crossfile \
             --prefix=/tmp/mesa \
@@ -62,7 +89,7 @@ jobs:
             -Db_lto=false \
             -Db_asneeded=false \
             -Dplatforms=android \
-            -Dplatform-sdk-version=${SDK_VER} \
+            -Dplatform-sdk-version="${SDK_VER}" \
             -Dandroid-stub=true \
             -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
@@ -76,25 +103,20 @@ jobs:
             -Dgbm=disabled \
             -Dllvm=disabled \
             -Dc_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" \
-            -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions" 
-            
-
-          # Compila somente a biblioteca Turnip
-          ninja -C build-android -t targets all | grep 'libvulkan_freedreno.so'
+            -Dcpp_args="-DTU_MAX_CHIP_GEN=6 -fvisibility=hidden -fno-rtti -fno-exceptions"
 
           ninja -C build-android src/freedreno/vulkan/libvulkan_freedreno.so
 
-          # Copia a biblioteca compilada para o artefato
           mkdir -p /tmp/mesa/turnip
           cp build-android/src/freedreno/vulkan/libvulkan_freedreno.so \
             /tmp/mesa/turnip/libvulkan_freedreno.so
 
-          # Verifica o arquivo antes de continuar
           test -s /tmp/mesa/turnip/libvulkan_freedreno.so
 
-          ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+          "${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
             --strip-unneeded \
             /tmp/mesa/turnip/libvulkan_freedreno.so
+
             
       - name: Show ccache stats
         run: ccache -s
