@@ -1,3 +1,4 @@
+
 name: Android CI
 
 on:
@@ -22,17 +23,19 @@ jobs:
           sudo apt install -y \
             libxrandr-dev libxxf86vm-dev libxcb-*-dev \
             libx11-xcb-dev libxfixes-dev libdrm-dev \
-            libx11-dev glslang-tools ccache
-          pip3 install mako meson ninja
+            libx11-dev glslang-tools ccache \
+            gettext-base unzip curl git python3-pip
+
+          pip3 install --user mako meson ninja
 
       - name: Setup environment variables
         run: |
-          echo "NDK_VER=android-ndk-r29" >> $GITHUB_ENV
-          echo "SDK_VER=34" >> $GITHUB_ENV
-          echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
-          mkdir -p ${{ github.workspace }}/.ccache
+          echo "NDK_VER=android-ndk-r29" >> "$GITHUB_ENV"
+          echo "SDK_VER=34" >> "$GITHUB_ENV"
+          echo "WORK_DIR=$(pwd)" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+          mkdir -p "${{ github.workspace }}/.ccache"
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -44,14 +47,85 @@ jobs:
 
       - name: Download NDK and Mesa
         run: |
-          curl -s https://dl.google.com/android/repository/${NDK_VER}-linux.zip -o ${NDK_VER}-linux.zip
-          unzip -q ${NDK_VER}-linux.zip
-          git clone --depth 1 --branch fd/gen8-crashdec \
-            https://gitlab.freedesktop.org/robclark/mesa.git mesa
+          curl -fsSL \
+            "https://dl.google.com/android/repository/${NDK_VER}-linux.zip" \
+            -o "${NDK_VER}-linux.zip"
+
+          unzip -q "${NDK_VER}-linux.zip"
+
+          git clone --depth 1 --branch main \
+            https://gitlab.freedesktop.org/mesa/mesa
+
+      - name: Generate and inspect cross-file
+        run: |
+          envsubst < "android-${{ matrix.arch }}" > build-crossfile
+
+          echo "===== GENERATED CROSS-FILE ====="
+          cat build-crossfile
+
+          echo "===== MESON VERSION ====="
+          meson --version
+
+          echo "===== PYTHON VERSION ====="
+          python3 --version
+
+          echo "===== CHECK HOST_MACHINE ====="
+          python3 - <<'PY'
+          import ast
+          import sys
+
+          section = None
+          machine = {}
+
+          with open("build-crossfile", encoding="utf-8") as f:
+              for line in f:
+                  line = line.strip()
+
+                  if not line or line.startswith("#"):
+                      continue
+
+                  if line.startswith("[") and line.endswith("]"):
+                      section = line[1:-1]
+                      continue
+
+                  if section == "host_machine" and "=" in line:
+                      key, value = line.split("=", 1)
+
+                      try:
+                          machine[key.strip()] = ast.literal_eval(
+                              value.strip()
+                          )
+                      except (ValueError, SyntaxError) as exc:
+                          print(
+                              f"Invalid value for {key.strip()}: "
+                              f"{value.strip()}: {exc}"
+                          )
+                          sys.exit(1)
+
+          print(repr(machine))
+
+          required = {"system", "cpu_family", "cpu", "endian"}
+          missing = required - machine.keys()
+
+          if missing:
+              print(f"Missing host_machine fields: {sorted(missing)}")
+              sys.exit(1)
+
+          invalid = {
+              key: value
+              for key, value in machine.items()
+              if not isinstance(value, str)
+          }
+
+          if invalid:
+              print(f"Non-string host_machine values: {invalid}")
+              sys.exit(1)
+
+          print("host_machine basic validation passed.")
+          PY
 
       - name: Build Turnip (Freedreno Vulkan)
         run: |
-          envsubst < android-${{matrix.arch}} > build-crossfile
           cd mesa
 
           meson setup build-android \
@@ -63,7 +137,7 @@ jobs:
             -Db_ndebug=true \
             -Db_lto=false \
             -Dplatforms=android \
-            -Dplatform-sdk-version=${SDK_VER} \
+            -Dplatform-sdk-version="${SDK_VER}" \
             -Dandroid-stub=true \
             -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
@@ -82,19 +156,26 @@ jobs:
 
           ninja -C build-android install
 
-          ${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip \
+          "${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
             --strip-unneeded \
             --strip-debug \
             /tmp/mesa/lib/libvulkan_freedreno.so
 
           mkdir -p /tmp/mesa/turnip
-          cp /tmp/mesa/lib/libvulkan_freedreno.so /tmp/mesa/turnip/libvulkan_freedreno.so
+
+          cp \
+            /tmp/mesa/lib/libvulkan_freedreno.so \
+            /tmp/mesa/turnip/libvulkan_freedreno.so
 
       - name: Show ccache stats
+        if: always()
         run: ccache -s
 
       - name: Upload Turnip
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Turnip
           path: /tmp/mesa/turnip/libvulkan_freedreno.so
+          if-no-files-found: error
+
