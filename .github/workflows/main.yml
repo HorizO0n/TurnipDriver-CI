@@ -76,7 +76,7 @@ jobs:
             exit 1
           fi
 
-          echo "===== CORRIGINDO E GERANDO CROSSFILE ====="
+          echo "===== GERANDO CROSSFILE ====="
 
           python3 - "$SOURCE_FILE" <<'PY' > /tmp/crossfile-template
           import re
@@ -85,20 +85,15 @@ jobs:
 
           text = Path(sys.argv[1]).read_text()
 
-          # b_lto é uma opção do projeto, não de [host_machine].
+          # Remove b_lto do crossfile.
+          # O valor será passado como opção ao Meson.
           text = re.sub(
               r"(?m)^[ \t]*b_lto[ \t]*=.*(?:\n|$)",
               "",
               text
           )
 
-          # Corrige o nome da chave do executável pkg-config.
-          text = re.sub(
-              r"(?m)^([ \t]*)pkgconfig([ \t]*=)",
-              r"\1'pkg-config'\2",
-              text
-          )
-
+          # Não adiciona aspas à chave pkgconfig.
           sys.stdout.write(text)
           PY
 
@@ -110,13 +105,12 @@ jobs:
           echo "===== VALIDANDO CROSSFILE ====="
 
           python3 - <<'PY'
-          from pathlib import Path
           import ast
           import configparser
-          import re
+
+          from pathlib import Path
 
           path = Path("build-crossfile")
-          text = path.read_text()
 
           config = configparser.ConfigParser(
               interpolation=None,
@@ -125,6 +119,9 @@ jobs:
 
           if not config.read(path):
               raise SystemExit("ERRO: crossfile não encontrado")
+
+          if not config.has_section("binaries"):
+              raise SystemExit("ERRO: seção [binaries] ausente")
 
           if not config.has_section("host_machine"):
               raise SystemExit("ERRO: seção [host_machine] ausente")
@@ -152,18 +149,14 @@ jobs:
               print(f"{key} = {parsed!r}")
 
           if config.has_option("host_machine", "b_lto"):
-              raise SystemExit("ERRO: b_lto ainda está em host_machine")
-
-          if re.search(r"(?m)^[ \t]*pkgconfig[ \t]*=", text):
               raise SystemExit(
-                  "ERRO: chave antiga pkgconfig ainda presente"
+                  "ERRO: b_lto não deve estar em host_machine"
               )
 
-          if not re.search(
-              r"""(?m)^[ \t]*['"]pkg-config['"][ \t]*=""",
-              text
-          ):
-              raise SystemExit("ERRO: entrada pkg-config ausente")
+          if not config.has_option("binaries", "pkgconfig"):
+              raise SystemExit(
+                  "ERRO: entrada pkgconfig ausente em [binaries]"
+              )
 
           print("Crossfile validado com sucesso.")
           PY
