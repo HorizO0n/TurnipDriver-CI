@@ -58,7 +58,7 @@ jobs:
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
             -Dstrip=true \
-            -Db_lto=true \
+            -Db_lto=false \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
