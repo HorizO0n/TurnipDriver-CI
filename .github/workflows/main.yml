@@ -1,5 +1,5 @@
 
-name: Android CI
+name: Android CI - Turnip LTO
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
         arch: ["aarch64"]
       fail-fast: false
 
-    name: "Build for Arm64"
+    name: "Build Turnip ARM64 with LTO"
     runs-on: ubuntu-latest
 
     steps:
@@ -50,9 +50,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ runner.os }}-${{ matrix.arch }}-${{ github.sha }}
+          key: ccache-${{ runner.os }}-${{ matrix.arch }}-lto-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.arch }}-
+            ccache-${{ runner.os }}-${{ matrix.arch }}-lto-
 
       - name: Download NDK and Mesa
         run: |
@@ -65,7 +65,7 @@ jobs:
           git clone --depth 1 --branch main \
             https://gitlab.freedesktop.org/mesa/mesa
 
-      - name: Build Turnip (Freedreno Vulkan)
+      - name: Build Turnip (Freedreno Vulkan) with LTO
         run: |
           export PATH="$HOME/.local/bin:$PATH"
 
@@ -85,7 +85,8 @@ jobs:
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
             -Dstrip=true \
-            -Db_lto=false \
+            -Db_lto=true \
+            -Dallow-broken-lto=true \
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
@@ -117,7 +118,7 @@ jobs:
             /tmp/mesa/lib/libvulkan_freedreno.so \
             /tmp/mesa/turnip/libvulkan_freedreno.so
 
-          echo "Turnip build completed successfully."
+          echo "Turnip LTO build completed successfully."
 
       - name: Show ccache stats
         run: ccache -s
@@ -125,6 +126,6 @@ jobs:
       - name: Upload Turnip
         uses: actions/upload-artifact@v4
         with:
-          name: Turnip-aarch64
+          name: Turnip-aarch64-LTO
           path: /tmp/mesa/turnip/libvulkan_freedreno.so
           if-no-files-found: error
