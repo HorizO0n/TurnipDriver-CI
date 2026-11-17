@@ -101,8 +101,8 @@ jobs:
             -Dfreedreno-kmds=kgsl \
             -Dgallium-drivers= \
             -Dopengl=false \
-            -Dgles1=false \
-            -Dgles2=false \
+            -Dgles1=disable \
+            -Dgles2=disable \
             -Degl=disabled \
             -Dglx=disabled \
             -Dgbm=disabled \
