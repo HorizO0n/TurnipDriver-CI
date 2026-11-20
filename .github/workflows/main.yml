@@ -1,4 +1,3 @@
-
 name: Android CI - Turnip LTO
 
 on:
@@ -93,7 +92,6 @@ jobs:
             -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
             -Db_ndebug=true \
-            -Dc_args="-DNDEBUG" \
             -Dperfetto=false \
             -Dfreedreno-kmds=kgsl \
             -Dgallium-drivers= \
@@ -104,8 +102,10 @@ jobs:
             -Dglx=disabled \
             -Dgbm=disabled \
             -Dllvm=disabled \
-            -Dc_link_args=-Wl,--gc-sections \
-            -Dcpp_link_args=-Wl,--gc-sections
+            -Dc_args="-DNDEBUG -fvisibility=hidden -ffunction-sections -fdata-sections" \
+            -Dcpp_args="-fvisibility=hidden -ffunction-sections -fdata-sections" \
+            -Dc_link_args="-Wl,--gc-sections -Wl,--build-id=none" \
+            -Dcpp_link_args="-Wl,--gc-sections -Wl,--build-id=none"
 
           ninja -C build-android -v install
 
