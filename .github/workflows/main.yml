@@ -92,6 +92,9 @@ jobs:
             -Dandroid-stub=true \
             -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
+            -Db_ndebug=true \
+            -Dc_args="-DNDEBUG" \
+            -Dperfetto=false \
             -Dfreedreno-kmds=kgsl \
             -Dgallium-drivers= \
             -Dopengl=false \
