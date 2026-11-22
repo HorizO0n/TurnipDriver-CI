@@ -89,6 +89,7 @@ jobs:
             -Dplatforms=android \
             -Dplatform-sdk-version=${SDK_VER} \
             -Dandroid-stub=true \
+            -Db_lundef=false \
             -Dandroid-strict=false \
             -Dvulkan-drivers=freedreno \
             -Db_ndebug=true \
@@ -103,7 +104,7 @@ jobs:
             -Dgbm=disabled \
             -Dllvm=disabled \
             -Dc_args="-DNDEBUG -ffunction-sections -fdata-sections" \
-            -Dcpp_args="-fvisibility=hidden -ffunction-sections -fdata-sections" \
+            -Dcpp_args="-ffunction-sections -fdata-sections" \
             -Dc_link_args="-Wl,--gc-sections -Wl,--build-id=none" \
             -Dcpp_link_args="-Wl,--gc-sections -Wl,--build-id=none"
 
