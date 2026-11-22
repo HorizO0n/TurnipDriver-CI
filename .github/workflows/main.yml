@@ -102,7 +102,7 @@ jobs:
             -Dglx=disabled \
             -Dgbm=disabled \
             -Dllvm=disabled \
-            -Dc_args="-fvisibility=hidden -DNDEBUG -ffunction-sections -fdata-sections" \
+            -Dc_args="-DNDEBUG -ffunction-sections -fdata-sections" \
             -Dcpp_args="-fvisibility=hidden -ffunction-sections -fdata-sections" \
             -Dc_link_args="-Wl,--gc-sections -Wl,--build-id=none" \
             -Dcpp_link_args="-Wl,--gc-sections -Wl,--build-id=none"
