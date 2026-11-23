@@ -1,3 +1,4 @@
+
 name: Android CI
 
 on:
@@ -50,7 +51,8 @@ jobs:
             "https://dl.google.com/android/repository/${NDK_VER}-linux.zip" \
             -o "${NDK_VER}-linux.zip"
 
-          unzip -q "${NDK_VER}-linux.zip"
+          rm -rf "${NDK_VER}"
+          unzip -oq "${NDK_VER}-linux.zip"
 
           git clone --depth 1 --branch main \
             https://gitlab.freedesktop.org/mesa/mesa
@@ -138,105 +140,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Turnip-Android-ARM64
-          path: /tmp/mesa/turnip/libvulkan_freedreno.so
-          if-no-files-found: error
-
-      - name: Setup environment variables
-        run: |
-          echo "NDK_VER=android-ndk-r29" >> $GITHUB_ENV
-          echo "SDK_VER=34" >> $GITHUB_ENV
-          echo "WORK_DIR=$(pwd)" >> $GITHUB_ENV
-          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
-          echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
-
-          mkdir -p "${{ github.workspace }}/.ccache"
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ runner.os }}-${{ matrix.arch }}-lto-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.arch }}-lto-
-
-      - name: Download NDK and Mesa
-        run: |
-          curl -fsSL \
-            https://dl.google.com/android/repository/${NDK_VER}-linux.zip \
-            -o ${NDK_VER}-linux.zip
-
-          unzip -q ${NDK_VER}-linux.zip
-
-          git clone --depth 1 --branch main \
-            https://gitlab.freedesktop.org/mesa/mesa
-
-      - name: Build Turnip (Freedreno Vulkan) with LTO
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-
-          export NDK_BIN="${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-
-          export CC="ccache ${NDK_BIN}/aarch64-linux-android${SDK_VER}-clang"
-          export CXX="ccache ${NDK_BIN}/aarch64-linux-android${SDK_VER}-clang++"
-
-          export CXXFLAGS="-fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables"
-
-          envsubst < android-${{ matrix.arch }} > build-crossfile
-
-          cd mesa
-
-          meson setup build-android \
-            --cross-file ../build-crossfile \
-            --prefix=/tmp/mesa \
-            -Dbuildtype=release \
-            -Dstrip=true \
-            -Db_lto=true \
-            -Dallow-broken-lto=true \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=${SDK_VER} \
-            -Dandroid-stub=true \
-            -Db_lundef=false \
-            -Dandroid-strict=false \
-            -Dvulkan-drivers=freedreno \
-            -Db_ndebug=true \
-            -Dperfetto=false \
-            -Dfreedreno-kmds=kgsl \
-            -Dgallium-drivers= \
-            -Dopengl=false \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Degl=disabled \
-            -Dglx=disabled \
-            -Dgbm=disabled \
-            -Dllvm=disabled \
-            -Dc_args="-DNDEBUG -ffunction-sections -fdata-sections" \
-            -Dcpp_args="-ffunction-sections -fdata-sections" \
-            -Dc_link_args="-Wl,--gc-sections -Wl,--build-id=none" \
-            -Dcpp_link_args="-Wl,--gc-sections -Wl,--build-id=none"
-
-          ninja -C build-android -v install
-
-          test -f /tmp/mesa/lib/libvulkan_freedreno.so
-
-          ${NDK_BIN}/llvm-strip \
-            --strip-unneeded \
-            /tmp/mesa/lib/libvulkan_freedreno.so
-
-          mkdir -p /tmp/mesa/turnip
-
-          cp \
-            /tmp/mesa/lib/libvulkan_freedreno.so \
-            /tmp/mesa/turnip/libvulkan_freedreno.so
-
-          echo "Turnip LTO build completed successfully."
-
-      - name: Show ccache stats
-        run: ccache -s
-
-      - name: Upload Turnip
-        uses: actions/upload-artifact@v4
-        with:
-          name: Turnip-aarch64-LTO
           path: /tmp/mesa/turnip/libvulkan_freedreno.so
           if-no-files-found: error
