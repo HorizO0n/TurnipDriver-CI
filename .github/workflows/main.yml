@@ -1,4 +1,3 @@
-
 name: Android CI
 
 on:
@@ -51,8 +50,7 @@ jobs:
             "https://dl.google.com/android/repository/${NDK_VER}-linux.zip" \
             -o "${NDK_VER}-linux.zip"
 
-          rm -rf "${NDK_VER}"
-          unzip -oq "${NDK_VER}-linux.zip"
+          unzip -q "${NDK_VER}-linux.zip"
 
           git clone --depth 1 --branch main \
             https://gitlab.freedesktop.org/mesa/mesa
@@ -92,9 +90,13 @@ jobs:
             --prefix=/tmp/mesa \
             -Dbuildtype=release \
             -Dperfetto=false \
-            -Dstrip=false \
+            -Db_asneeded=true \
+            -Doptimization=3 \
+            -Dstrip=true \
             -Db_ndebug=true \
             -Db_lto=false \
+            -Dbuild-tests=false \
+            -Dgpuvis=false \
             -Db_lundef=false \
             -Dplatforms=android \
             -Dplatform-sdk-version="${SDK_VER}" \
