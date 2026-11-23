@@ -1,4 +1,4 @@
-name: Android CI - Turnip LTO
+name: Android CI
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
         arch: ["aarch64"]
       fail-fast: false
 
-    name: "Build Turnip ARM64 with LTO"
+    name: "Build for Arm64"
     runs-on: ubuntu-latest
 
     steps:
@@ -20,19 +20,126 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y \
-            libxrandr-dev \
-            libxxf86vm-dev \
-            libxcb-*-dev \
-            libx11-xcb-dev \
-            libxfixes-dev \
-            libdrm-dev \
-            libx11-dev \
-            glslang-tools \
-            ccache \
-            ninja-build \
-            python3-pip
+            libxrandr-dev libxxf86vm-dev libxcb-*-dev \
+            libx11-xcb-dev libxfixes-dev libdrm-dev \
+            libx11-dev glslang-tools ccache \
+            gettext-base unzip curl git python3-pip
 
           pip3 install --user mako meson ninja
+
+      - name: Setup environment variables
+        run: |
+          echo "NDK_VER=android-ndk-r29" >> "$GITHUB_ENV"
+          echo "SDK_VER=34" >> "$GITHUB_ENV"
+          echo "WORK_DIR=$(pwd)" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=500M" >> "$GITHUB_ENV"
+          mkdir -p "${{ github.workspace }}/.ccache"
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.arch }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.arch }}
+
+      - name: Download NDK and Mesa
+        run: |
+          curl -fsSL \
+            "https://dl.google.com/android/repository/${NDK_VER}-linux.zip" \
+            -o "${NDK_VER}-linux.zip"
+
+          unzip -q "${NDK_VER}-linux.zip"
+
+          git clone --depth 1 --branch main \
+            https://gitlab.freedesktop.org/mesa/mesa
+
+      - name: Generate cross-file
+        run: |
+          NDK_BIN="${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+
+          cat > build-crossfile <<EOF
+          [binaries]
+          ar = '${NDK_BIN}/llvm-ar'
+          c = ['ccache', '${NDK_BIN}/aarch64-linux-android34-clang']
+          cpp = ['ccache', '${NDK_BIN}/aarch64-linux-android34-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '--start-no-unused-arguments', '-static-libstdc++', '--end-no-unused-arguments', '-Wno-c++11-narrowing']
+          c_ld = 'lld'
+          cpp_ld = 'lld'
+          strip = '${NDK_BIN}/llvm-strip'
+          pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=.', '/usr/bin/pkg-config']
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8'
+          endian = 'little'
+          EOF
+
+          echo "===== GENERATED CROSS-FILE ====="
+          cat build-crossfile
+          echo "===== MESON VERSION ====="
+          meson --version
+
+      - name: Build Turnip (Freedreno Vulkan)
+        run: |
+          cd mesa
+
+          meson setup build-android \
+            --cross-file ../build-crossfile \
+            --prefix=/tmp/mesa \
+            -Dbuildtype=release \
+            -Dperfetto=false \
+            -Dstrip=false \
+            -Db_ndebug=true \
+            -Db_lto=false \
+            -Db_lundef=false \
+            -Dplatforms=android \
+            -Dplatform-sdk-version="${SDK_VER}" \
+            -Dandroid-stub=true \
+            -Dandroid-strict=false \
+            -Dvulkan-drivers=freedreno \
+            -Dfreedreno-kmds=kgsl \
+            -Dgallium-drivers= \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Degl=disabled \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Dllvm=disabled \
+            -Dc_args="-DNDEBUG" \
+            -Dc_link_args=-Wl,--gc-sections \
+            -Dcpp_link_args=-Wl,--gc-sections
+
+          ninja -C build-android install
+
+          "${WORK_DIR}/${NDK_VER}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" \
+            --strip-unneeded \
+            --strip-debug \
+            /tmp/mesa/lib/libvulkan_freedreno.so
+
+          mkdir -p /tmp/mesa/turnip
+
+          cp \
+            /tmp/mesa/lib/libvulkan_freedreno.so \
+            /tmp/mesa/turnip/libvulkan_freedreno.so
+
+          echo "===== TURNIP OUTPUT ====="
+          ls -lh /tmp/mesa/turnip/libvulkan_freedreno.so
+          file /tmp/mesa/turnip/libvulkan_freedreno.so
+
+      - name: Show ccache stats
+        if: always()
+        run: ccache -s
+
+      - name: Upload Turnip
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Turnip-Android-ARM64
+          path: /tmp/mesa/turnip/libvulkan_freedreno.so
+          if-no-files-found: error
 
       - name: Setup environment variables
         run: |
